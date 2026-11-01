@@ -1,0 +1,18 @@
+# Free classroom demo. SQLite data is temporary on this plan.
+# For persistent data, use a paid service with a disk and set DATA_DIR
+# to the disk mount path before accepting real listings.
+services:
+  - type: web
+    name: between-the-pages
+    runtime: node
+    plan: free
+    buildCommand: npm test
+    startCommand: npm start
+    healthCheckPath: /api/me
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
