@@ -55,6 +55,8 @@ function header() {
   target.innerHTML = state.user
     ? `<span class="user-chip"><span class="avatar">${escapeHTML(state.user.name[0].toUpperCase())}</span><span>${escapeHTML(state.user.name.split(' ')[0])}</span></span><a href="#list" class="btn btn-primary btn-sm">${icons.plus} List a book</a><button class="icon-button" data-action="logout" aria-label="Sign out" title="Sign out">↪</button>`
     : `<button class="btn btn-ghost" data-action="auth" data-mode="login">Log in</button><button class="btn btn-primary btn-sm" data-action="auth" data-mode="register">Join the exchange ${icons.arrow}</button>`;
+  const mobileAuth = $('#mobile-auth');
+  if (mobileAuth) mobileAuth.style.display = state.user ? 'none' : '';
   const route = location.hash.slice(1).split('/')[0] || 'home';
   document.querySelectorAll('[data-nav]').forEach(link => link.classList.toggle('active', link.dataset.nav === route));
 }
@@ -136,7 +138,7 @@ async function bookPage(id) {
   let book;
   try { ({book} = await api(`/api/books/${id}`)); } catch { app.innerHTML = pageHero('Page not found','Book not found','This story may have moved on.') + '<section class="page-content wrap"><a class="btn btn-primary" href="#explore">Explore books</a></section>'; return; }
   const own = state.user?.id === book.owner_id;
-  app.innerHTML = `${pageHero('A closer look','${escapeHTML(book.title)}','Check the condition and location before requesting this copy.')}
+  app.innerHTML = `${pageHero('A closer look',escapeHTML(book.title),'Check the condition and location before requesting this copy.')}
     <section class="page-content"><div class="wrap"><a href="#explore" class="text-link">← Back to exploring</a><div class="panel detail-page-panel"><div class="detail-layout"><div class="detail-art">${cover(book)}</div><div><span class="eyebrow">${escapeHTML(book.genre)}</span><h2 class="detail-heading">${escapeHTML(book.title)}</h2><p class="book-author">by ${escapeHTML(book.author)}</p>
     <div class="detail-meta"><span>${escapeHTML(book.book_condition)} condition</span><span>${escapeHTML(book.location)}</span><span>${book.status==='available'?'Available for exchange':book.status==='reserved'?'Exchange in progress':'Already exchanged'}</span></div>
     <p class="detail-description">${escapeHTML(book.description)}</p><div class="detail-owner"><span class="avatar">${escapeHTML(book.owner_name[0])}</span><div><strong>Shared by ${escapeHTML(book.owner_name)}</strong><small>Meet at ${escapeHTML(book.location)}</small></div></div>
@@ -190,10 +192,23 @@ async function render() {
     
   } catch (error) { toast(error.message,true); }
 }
-function closeModal() { modalRoot.classList.remove('open'); modalRoot.innerHTML=''; document.body.style.overflow=''; }
+let modalTrigger = null;
+function closeModal() {
+  if (!modalRoot.classList.contains('open')) return;
+  modalRoot.classList.remove('open');
+  modalRoot.innerHTML = '';
+  document.body.style.overflow = '';
+  document.querySelectorAll('body > :not(.modal-root):not(.toast-region)').forEach(node => { node.inert = false; });
+  if (modalTrigger?.isConnected) modalTrigger.focus();
+  modalTrigger = null;
+}
 function showModal(content, wide = false) {
-  modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"></div><div class="modal ${wide?'wide':''}" role="dialog" aria-modal="true"><button class="icon-button modal-close" data-action="close-modal" aria-label="Close dialog">✕</button>${content}</div>`;
-  modalRoot.classList.add('open'); document.body.style.overflow='hidden';
+  if (!modalRoot.classList.contains('open')) modalTrigger = document.activeElement;
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"></div><div class="modal ${wide?'wide':''}" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1"><button class="icon-button modal-close" data-action="close-modal" aria-label="Close dialog">✕</button>${content}</div>`;
+  modalRoot.querySelector('h2').id = 'dialog-title';
+  modalRoot.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.querySelectorAll('body > :not(.modal-root):not(.toast-region)').forEach(node => { node.inert = true; });
   modalRoot.querySelector('input,textarea,button:not(.modal-close)')?.focus();
 }
 function authModal(mode = 'login') {
@@ -279,7 +294,20 @@ document.addEventListener('submit', async event => {
   } catch (error) { toast(error.message,true); }
   finally { submit.disabled=false; }
 });
-document.addEventListener('keydown', event => { if (event.key==='Escape') closeModal(); });
+document.addEventListener('keydown', event => {
+  if (!modalRoot.classList.contains('open')) return;
+  if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
+  if (event.key !== 'Tab') return;
+  const controls = [...modalRoot.querySelectorAll('a[href],button,input,select,textarea,[tabindex]')]
+    .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
+  const first = controls[0], last = controls.at(-1);
+  if (!first) { event.preventDefault(); modalRoot.querySelector('.modal').focus(); return; }
+  if (event.shiftKey && (document.activeElement === first || !modalRoot.contains(document.activeElement))) {
+    event.preventDefault(); last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || !modalRoot.contains(document.activeElement))) {
+    event.preventDefault(); first.focus();
+  }
+});
 $('#menu-toggle').addEventListener('click', () => { const nav=$('#mobile-nav'); nav.classList.toggle('open'); $('#menu-toggle').setAttribute('aria-expanded',String(nav.classList.contains('open'))); });
 $('#mobile-nav').addEventListener('click', event => { if(event.target.closest('a')) { $('#mobile-nav').classList.remove('open'); $('#menu-toggle').setAttribute('aria-expanded','false'); } });
 window.addEventListener('hashchange', async () => { window.scrollTo(0, 0); await render(); if (!matchMedia('(prefers-reduced-motion: reduce)').matches) app.animate([{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'translateY(0)'}],{duration:300,easing:'cubic-bezier(.2,.7,.2,1)'}); });
